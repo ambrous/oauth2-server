@@ -17,6 +17,13 @@ use League\OAuth2\Server\Exception\UniqueTokenIdentifierConstraintViolationExcep
  */
 interface RefreshTokenRepositoryInterface extends RepositoryInterface
 {
+        /**
+     * Get a refresh token by an indentifier
+     *
+     * @return RefreshTokenEntityInterface
+     */
+    public function getByIndetifier($tokenId);
+
     /**
      * Creates a new refresh token
      *

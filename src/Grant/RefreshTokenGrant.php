@@ -25,13 +25,19 @@ use Psr\Http\Message\ServerRequestInterface;
 class RefreshTokenGrant extends AbstractGrant
 {
     /**
+     * Setting optional refresh token up
+     */
+    protected $optionalRefreshToken;
+
+    /**
      * @param RefreshTokenRepositoryInterface $refreshTokenRepository
      */
-    public function __construct(RefreshTokenRepositoryInterface $refreshTokenRepository)
+    public function __construct(RefreshTokenRepositoryInterface $refreshTokenRepository, $optionalRefreshToken = false)
     {
         $this->setRefreshTokenRepository($refreshTokenRepository);
 
         $this->refreshTokenTTL = new DateInterval('P1M');
+        $this->optionalRefreshToken = $optionalRefreshToken;
     }
 
     /**
@@ -61,20 +67,29 @@ class RefreshTokenGrant extends AbstractGrant
 
         // Expire old tokens
         $this->accessTokenRepository->revokeAccessToken($oldRefreshToken['access_token_id']);
-        $this->refreshTokenRepository->revokeRefreshToken($oldRefreshToken['refresh_token_id']);
 
         // Issue and persist new access token
         $accessToken = $this->issueAccessToken($accessTokenTTL, $client, $oldRefreshToken['user_id'], $scopes);
         $this->getEmitter()->emit(new RequestEvent(RequestEvent::ACCESS_TOKEN_ISSUED, $request));
-        $responseType->setAccessToken($accessToken);
 
-        // Issue and persist new refresh token if given
-        $refreshToken = $this->issueRefreshToken($accessToken);
+        // Update or not refresh token
+        if (!$this->optionalRefreshToken) {
+            $this->refreshTokenRepository->revokeRefreshToken($oldRefreshToken['refresh_token_id']);
+            // Issue and persist new refresh token if given
+            $refreshToken = $this->issueRefreshToken($accessToken);
 
-        if ($refreshToken !== null) {
-            $this->getEmitter()->emit(new RequestEvent(RequestEvent::REFRESH_TOKEN_ISSUED, $request));
-            $responseType->setRefreshToken($refreshToken);
+            if ($refreshToken !== null) {
+                $this->getEmitter()->emit(new RequestEvent(RequestEvent::REFRESH_TOKEN_ISSUED, $request));
+                $responseType->setRefreshToken($refreshToken);
+            }
+
+        } else {
+            $refreshToken = $this->refreshTokenRepository->getByIndetifier($oldRefreshToken['refresh_token_id']);
+            $refreshToken->setAccessToken($accessToken); 
         }
+
+        $responseType->setAccessToken($accessToken);
+        $responseType->setRefreshToken($refreshToken);
 
         return $responseType;
     }
